@@ -1,10 +1,6 @@
-import { Router } from 'express';
+import {Router} from 'express';
 import {
-    getTasks,
-    getTask,
-    createTask,
-    updateTask,
-    deleteTask,
+    getTasks, getTask, createTask, updateTask, deleteTask,
 } from '../controllers/taskController.js';
 
 const router = Router();

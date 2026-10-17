@@ -6,7 +6,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "format": "prettier --write src",
+    "format:check": "prettier --check src"
   },
   "keywords": [],
   "author": "",
@@ -14,5 +16,8 @@
   "type": "module",
   "dependencies": {
     "express": "^5.3.0"
+  },
+  "devDependencies": {
+    "prettier": "3.9.10"
   }
 }
