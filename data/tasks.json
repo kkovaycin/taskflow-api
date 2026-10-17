@@ -1,0 +1,12 @@
+[
+  {
+    "id": "e05fa60a-7d00-41c9-88aa-7c0ec0a60ca7",
+    "title": "Create login endpoint",
+    "description": "Implement the user login endpoint.",
+    "assignee": "Kubra",
+    "status": "pending",
+    "priority": "high",
+    "createdAt": "2026-10-17T16:57:11.920Z",
+    "updatedAt": "2026-10-17T16:57:11.920Z"
+  }
+]
