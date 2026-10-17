@@ -1,7 +1,9 @@
 export default function logger(req, res, next) {
-    const timestamp = new Date().toISOString();
+  // Use UTC timestamps to keep logs consistent across environments.
+  const timestamp = new Date().toISOString();
 
-    console.log(`[${timestamp}] ${req.method} ${req.originalUrl}`);
+  console.log(`[${timestamp}] ${req.method} ${req.originalUrl}`);
 
-    next();
+  // Continue processing so the request can reach its route handler.
+  next();
 }

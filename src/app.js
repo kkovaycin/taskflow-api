@@ -4,6 +4,7 @@ import taskRoutes from './routes/taskRoutes.js';
 
 const app = express();
 
+// Log requests before parsing so malformed JSON requests are recorded too.
 app.use(logger);
 app.use(express.json());
 
@@ -16,13 +17,16 @@ app.get('/health', (req, res) => {
 
 app.use('/tasks', taskRoutes);
 
+// Keep the fallback after all routes so it only handles unmatched requests.
 app.use((req, res) => {
   res.status(404).json({
     message: 'Endpoint not found.',
   });
 });
 
+// Register error handling last to catch errors from earlier middleware and routes.
 app.use((err, req, res, next) => {
+  // Delegate to Express if the response has already started.
   if (res.headersSent) {
     return next(err);
   }
@@ -35,6 +39,7 @@ app.use((err, req, res, next) => {
 
   const status = err.status || 500;
 
+  // Log internal error details while keeping them out of client responses.
   if (status >= 500) {
     console.error(err);
   }

@@ -1,7 +1,10 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
+// Resolve storage relative to this module so the working directory does not affect which data file is used.
 const tasksFile = new URL('../../data/tasks.json', import.meta.url);
+
+// Only allow editable fields; IDs and timestamps are managed by the server.
 const allowedFields = [
   'title',
   'description',
@@ -12,7 +15,10 @@ const allowedFields = [
 
 function fail(status, message) {
   const error = new Error(message);
+
+  // Let the central error handler determine the HTTP response status.
   error.status = status;
+
   throw error;
 }
 
@@ -27,9 +33,11 @@ function readTasks() {
 }
 
 function saveTasks(tasks) {
+  // Keep persisted data readable for inspection during development.
   writeFileSync(tasksFile, JSON.stringify(tasks, null, 2), 'utf8');
 }
 
+// Reuse the same validation rules for creation and partial updates.
 function validateTask(data, partial = false) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     fail(400, 'Request body must be a JSON object.');
@@ -41,6 +49,7 @@ function validateTask(data, partial = false) {
     fail(400, 'Provide supported task fields only.');
   }
 
+  // Partial updates may omit required fields already stored on the task.
   for (const field of ['title', 'assignee']) {
     if (
       (!partial || field in data) &&
@@ -116,6 +125,7 @@ export function updateTask(id, data) {
 
   validateTask(data, true);
 
+  // Preserve existing values for fields omitted from the update request.
   Object.assign(task, data, {
     updatedAt: new Date().toISOString(),
   });
@@ -131,6 +141,7 @@ export function updateTask(id, data) {
 export function deleteTask(id) {
   const tasks = readTasks();
 
+  // Verify existence so deleting an unknown task returns 404.
   findTask(tasks, id);
 
   saveTasks(tasks.filter((task) => task.id !== id));
