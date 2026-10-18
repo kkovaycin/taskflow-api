@@ -1,8 +1,21 @@
 import express from 'express';
 import logger from './middleware/logger.js';
 import taskRoutes from './routes/taskRoutes.js';
+import cors from 'cors';
 
 const app = express();
+
+const allowedOrigins = [
+  'http://localhost:4200',
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
+app.use(
+    cors({
+      origin: allowedOrigins,
+      methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    }),
+);
 
 // Log requests before parsing so malformed JSON requests are recorded too.
 app.use(logger);
