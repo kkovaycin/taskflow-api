@@ -1,10 +1,7 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+
 import { randomUUID } from 'node:crypto';
+import { pool } from '../config/database.js';
 
-// Resolve storage relative to this module so the working directory does not affect which data file is used.
-const tasksFile = new URL('../../data/tasks.json', import.meta.url);
-
-// Only allow editable fields; IDs and timestamps are managed by the server.
 const allowedFields = [
   'title',
   'description',
@@ -15,29 +12,10 @@ const allowedFields = [
 
 function fail(status, message) {
   const error = new Error(message);
-
-  // Let the central error handler determine the HTTP response status.
   error.status = status;
-
   throw error;
 }
 
-function readTasks() {
-  const tasks = JSON.parse(readFileSync(tasksFile, 'utf8'));
-
-  if (!Array.isArray(tasks)) {
-    throw new Error('Task storage must contain a JSON array.');
-  }
-
-  return tasks;
-}
-
-function saveTasks(tasks) {
-  // Keep persisted data readable for inspection during development.
-  writeFileSync(tasksFile, JSON.stringify(tasks, null, 2), 'utf8');
-}
-
-// Reuse the same validation rules for creation and partial updates.
 function validateTask(data, partial = false) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     fail(400, 'Request body must be a JSON object.');
@@ -45,104 +23,150 @@ function validateTask(data, partial = false) {
 
   const keys = Object.keys(data);
 
-  if (keys.length === 0 || keys.some((key) => !allowedFields.includes(key))) {
+  if (
+      keys.length === 0 ||
+      keys.some((key) => !allowedFields.includes(key))
+  ) {
     fail(400, 'Provide supported task fields only.');
   }
 
-  // Partial updates may omit required fields already stored on the task.
   for (const field of ['title', 'assignee']) {
     if (
-      (!partial || field in data) &&
-      (typeof data[field] !== 'string' || !data[field].trim())
+        (!partial || field in data) &&
+        (typeof data[field] !== 'string' || !data[field].trim())
     ) {
       fail(400, `${field} must be a non-empty string.`);
     }
   }
 
-  if ('description' in data && typeof data.description !== 'string') {
+  if (
+      'description' in data &&
+      typeof data.description !== 'string'
+  ) {
     fail(400, 'description must be a string.');
   }
 
   if (
-    'status' in data &&
-    !['pending', 'in_progress', 'completed'].includes(data.status)
+      'status' in data &&
+      !['pending', 'in_progress', 'completed'].includes(data.status)
   ) {
     fail(400, 'status must be pending, in_progress, or completed.');
   }
 
   if (
-    'priority' in data &&
-    !['low', 'medium', 'high'].includes(data.priority)
+      'priority' in data &&
+      !['low', 'medium', 'high'].includes(data.priority)
   ) {
     fail(400, 'priority must be low, medium, or high.');
   }
 }
 
-function findTask(tasks, id) {
-  const task = tasks.find((item) => item.id === id);
+function validateId(id) {
+  if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+  ) {
+    fail(404, 'Task not found.');
+  }
+}
 
-  if (!task) {
+function mapTask(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    assignee: row.assignee,
+    status: row.status,
+    priority: row.priority,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
+
+export async function getAllTasks() {
+  const result = await pool.query(
+      'SELECT * FROM tasks ORDER BY created_at DESC, id DESC'
+  );
+
+  return result.rows.map(mapTask);
+}
+
+export async function getTaskById(id) {
+  validateId(id);
+
+  const result = await pool.query(
+      'SELECT * FROM tasks WHERE id = $1',
+      [id]
+  );
+
+  if (result.rowCount === 0) {
     fail(404, 'Task not found.');
   }
 
-  return task;
+  return mapTask(result.rows[0]);
 }
 
-export function getAllTasks() {
-  return readTasks();
-}
-
-export function getTaskById(id) {
-  return findTask(readTasks(), id);
-}
-
-export function createTask(data) {
+export async function createTask(data) {
   validateTask(data);
 
-  const tasks = readTasks();
-  const now = new Date().toISOString();
+  const result = await pool.query(
+      `INSERT INTO tasks
+      (id, title, description, assignee, status, priority)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING *`,
+      [
+        randomUUID(),
+        data.title.trim(),
+        data.description ?? '',
+        data.assignee.trim(),
+        data.status ?? 'pending',
+        data.priority ?? 'medium',
+      ]
+  );
 
-  const task = {
-    id: randomUUID(),
-    title: data.title.trim(),
-    description: data.description ?? '',
-    assignee: data.assignee.trim(),
-    status: data.status ?? 'pending',
-    priority: data.priority ?? 'medium',
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  tasks.push(task);
-  saveTasks(tasks);
-
-  return task;
+  return mapTask(result.rows[0]);
 }
 
-export function updateTask(id, data) {
-  const tasks = readTasks();
-  const task = findTask(tasks, id);
-
+export async function updateTask(id, data) {
+  validateId(id);
   validateTask(data, true);
 
-  // Preserve existing values for fields omitted from the update request.
-  Object.assign(task, data, {
-    updatedAt: new Date().toISOString(),
+  const fields = Object.keys(data);
+  const values = fields.map((field) => {
+    if (['title', 'assignee'].includes(field)) {
+      return data[field].trim();
+    }
+    return data[field];
   });
 
-  task.title = task.title.trim();
-  task.assignee = task.assignee.trim();
+  const updates = fields.map(
+      (field, index) => `${field} = $${index + 1}`
+  );
 
-  saveTasks(tasks);
+  const result = await pool.query(
+      `UPDATE tasks
+     SET ${updates.join(', ')}, updated_at = NOW()
+     WHERE id = $${values.length + 1}
+     RETURNING *`,
+      [...values, id]
+  );
 
-  return task;
+  if (result.rowCount === 0) {
+    fail(404, 'Task not found.');
+  }
+
+  return mapTask(result.rows[0]);
 }
 
-export function deleteTask(id) {
-  const tasks = readTasks();
+export async function deleteTask(id) {
+  validateId(id);
 
-  // Verify existence so deleting an unknown task returns 404.
-  findTask(tasks, id);
+  const result = await pool.query(
+      'DELETE FROM tasks WHERE id = $1 RETURNING id',
+      [id]
+  );
 
-  saveTasks(tasks.filter((task) => task.id !== id));
+  if (result.rowCount === 0) {
+    fail(404, 'Task not found.');
+  }
 }
+
