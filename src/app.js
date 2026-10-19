@@ -10,15 +10,16 @@ const allowedOrigins = [
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
+// Record requests before CORS or JSON parsing can return an early response.
+app.use(logger);
+
 app.use(
-    cors({
-      origin: allowedOrigins,
-      methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-    }),
+  cors({
+    origin: allowedOrigins,
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+  }),
 );
 
-// Log requests before parsing so malformed JSON requests are recorded too.
-app.use(logger);
 app.use(express.json());
 
 app.get('/health', (req, res) => {

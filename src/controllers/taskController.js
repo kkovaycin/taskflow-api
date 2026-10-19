@@ -1,4 +1,3 @@
-
 import * as taskService from '../services/taskService.js';
 
 export async function getTasks(req, res) {
@@ -18,10 +17,7 @@ export async function createTask(req, res) {
 }
 
 export async function updateTask(req, res) {
-  const task = await taskService.updateTask(
-      req.params.id,
-      req.body
-  );
+  const task = await taskService.updateTask(req.params.id, req.body);
 
   res.status(200).json(task);
 }
